@@ -1,0 +1,61 @@
+# Source definitions
+# Each source has: name, type, credentials_key (matches secrets/.env), quality_weight, enabled
+#
+# Source types:
+#   local_folder   — watch a folder for .md / .txt files dropped in manually
+#   patreon        — scrape Patreon posts via headless browser (requires cookies)
+#   youtube        — fetch transcripts via youtube-transcript-api
+#   rss            — parse RSS/Atom feed
+#   twitter_list   — scrape X/Twitter list (requires cookies or API key)
+#   manual         — user pastes content via CLI
+
+sources:
+
+  # PHASE 1 — enabled by default, no external credentials needed
+  - name: local_drop
+    type: local_folder
+    path: knowledge/raw/drop/
+    enabled: true
+    quality_weight: 0.7         # treat manually dropped content as high quality
+    source_category: discovery
+
+  # PATREON — requires browser cookies (see SETUP.md for Playwright cookie export)
+  - name: investanswers_patreon
+    type: patreon
+    creator_url: https://www.patreon.com/investanswers
+    credentials_key: PATREON_COOKIES_FILE   # path to exported cookies JSON
+    enabled: false              # enable once cookies configured
+    quality_weight: 0.85
+    source_category: discovery
+    poll_interval_hours: 24
+    max_posts_per_run: 10
+
+  - name: realvision_patreon
+    type: patreon
+    creator_url: https://www.patreon.com/realvision
+    credentials_key: PATREON_COOKIES_FILE
+    enabled: false
+    quality_weight: 0.80
+    source_category: discovery
+    poll_interval_hours: 24
+    max_posts_per_run: 10
+
+  # YOUTUBE — no credentials needed for public videos (transcript API)
+  - name: youtube_transcripts
+    type: youtube
+    channel_ids: []             # add channel IDs here
+    playlist_ids: []            # or playlist IDs
+    enabled: false
+    quality_weight: 0.70
+    source_category: discovery
+    poll_interval_hours: 24
+    include_comments: false     # comments = euphoria only, never viability
+
+  # RSS / NEWSLETTER
+  - name: jordi_visser_substack
+    type: rss
+    url: ""                     # add Substack RSS URL
+    enabled: false
+    quality_weight: 0.80
+    source_category: discovery
+    poll_interval_hours: 24

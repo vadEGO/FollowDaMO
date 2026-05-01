@@ -1,0 +1,23 @@
+pydantic>=2.0
+requests>=2.31
+python-dotenv>=1.0
+httpx>=0.27
+beautifulsoup4>=4.12
+playwright>=1.44        # Patreon scraping (headless browser)
+aiohttp>=3.9
+sqlite-utils>=3.35
+python-telegram-bot>=20.0
+tenacity>=8.2           # retry / backoff
+schedule>=1.2
+click>=8.1              # CLI for scripts
+rich>=13.0              # pretty terminal output
+jinja2>=3.1             # Telegram message templates
+
+# Research / data
+coingecko-api>=0.1.7; python_requires>="3.10"
+# CoinGecko free via direct requests — no SDK needed in practice
+
+# Dev / test
+pytest>=8.0
+pytest-asyncio>=0.23
+responses>=0.25         # mock HTTP for tests

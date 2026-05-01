@@ -1,0 +1,38 @@
+# Telegram notification settings
+# Bot token and chat ID are stored in secrets/.env — NOT here
+
+notifications:
+  daily_digest:
+    enabled: true
+    send_time: "07:00"          # local time
+    max_signals_in_digest: 5
+    include_blocked: true
+    include_portfolio_heat: true
+
+  weekly_memo:
+    enabled: true
+    send_day: sunday
+    send_time: "08:00"
+
+  real_time_alerts:
+    enabled: false              # Phase 7 feature
+    on_new_real_candidate: true
+    on_portfolio_heat_critical: true  # heat > 90
+
+# Message format
+format:
+  parse_mode: HTML              # HTML or Markdown
+  max_message_length: 4096      # Telegram limit
+
+# Priority ordering in daily digest (action-first):
+# 1. Approval packets awaiting action
+# 2. Portfolio heat status (GREEN / AMBER / RED)
+# 3. Action-required signals (crossed threshold, need decision)
+# 4. Informational signals (moved but no immediate action needed)
+# 5. Blocked and logged items
+digest_priority_order:
+  - approval_packets
+  - portfolio_heat
+  - action_required
+  - informational
+  - blocked_logged

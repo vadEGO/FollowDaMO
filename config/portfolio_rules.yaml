@@ -1,0 +1,55 @@
+# Portfolio allocation rules and thesis budgets
+
+allocation_rules:
+  minimum_dry_powder: 0.10
+  max_single_stock: 0.15
+  max_single_crypto_asset: 0.15
+  max_total_crypto_beta: 0.35
+  max_tactical_satellites: 0.10
+  max_new_position_starter: 0.02
+  max_new_position_full_size: 0.05
+  max_weekly_turnover: 0.05
+  require_user_approval_for_real_action: true
+
+# An asset counts toward ONE thesis only (its primary_thesis field)
+thesis_budget:
+  scarce_assets:
+    target: 0.25
+    max: 0.40
+  ai_growth:
+    target: 0.30
+    max: 0.40
+  crypto_beta:
+    target: 0.20
+    max: 0.35
+  tactical_satellites:
+    target: 0.05
+    max: 0.10
+  dry_powder:
+    target: 0.10
+    min: 0.075
+
+portfolio_heat:
+  high_threshold: 80
+  blocked_above_high:
+    - new_high_beta_entries
+  allowed_above_high:
+    - research
+    - simulation
+    - trim
+    - hedge
+  inputs:
+    - crypto_beta_exposure
+    - ai_growth_exposure
+    - solana_ecosystem_exposure
+    - single_name_concentration
+    - dry_powder_level
+    - leverage
+    - crowding_exposure
+    - recent_drawdown
+
+# Watchlist pruning conditions
+watchlist_pruning:
+  no_mention_days: 60
+  min_research_score: 40
+  min_evidence_quality: low

@@ -1,0 +1,84 @@
+# Known asset registry — used for entity resolution validation
+# Tickers here are the ground truth; LLM extractions must match these before storage
+
+crypto:
+  - symbol: BTC
+    name: Bitcoin
+    primary_thesis: scarce_assets
+    asset_type: crypto
+  - symbol: ETH
+    name: Ethereum
+    primary_thesis: ai_growth
+    asset_type: crypto
+  - symbol: SOL
+    name: Solana
+    primary_thesis: crypto_beta
+    asset_type: crypto
+  - symbol: JUP
+    name: Jupiter
+    primary_thesis: crypto_beta
+    asset_type: crypto
+  - symbol: SUI
+    name: Sui
+    primary_thesis: crypto_beta
+    asset_type: crypto
+  - symbol: HYPE
+    name: Hyperliquid
+    primary_thesis: crypto_beta
+    asset_type: crypto
+  - symbol: RENDER
+    name: Render Network
+    primary_thesis: ai_growth
+    asset_type: crypto
+  - symbol: TAO
+    name: Bittensor
+    primary_thesis: ai_growth
+    asset_type: crypto
+  - symbol: NEAR
+    name: NEAR Protocol
+    primary_thesis: crypto_beta
+    asset_type: crypto
+  - symbol: WIF
+    name: Dogwifhat
+    primary_thesis: tactical_satellite
+    asset_type: crypto
+
+equities:
+  - symbol: NVDA
+    name: NVIDIA
+    primary_thesis: ai_growth
+    asset_type: equity
+  - symbol: TSLA
+    name: Tesla
+    primary_thesis: ai_growth
+    asset_type: equity
+  - symbol: IONQ
+    name: IonQ
+    primary_thesis: ai_growth
+    asset_type: equity
+  - symbol: CRM
+    name: Salesforce
+    primary_thesis: ai_growth
+    asset_type: equity
+
+etfs:
+  - symbol: ROBO
+    name: ROBO Global Robotics ETF
+    primary_thesis: ai_growth
+    asset_type: etf
+
+# Ambiguous tickers that must NOT be auto-resolved without context
+ambiguous_tickers:
+  - AI        # C3.ai vs AI theme
+  - ARM       # Arm Holdings vs word
+  - META      # Meta Platforms vs generic
+  - NEAR      # NEAR Protocol vs word
+  - HYPE      # Hyperliquid token vs word
+  - RENDER    # Render token vs concept
+  - LINK      # Chainlink vs word
+  - KEY       # SelfKey vs word
+  - IRON      # Iron Finance vs word
+  - AMP       # Amp token vs word
+  - FLOW      # Flow blockchain vs word
+  - POWER     # concept vs token
+  - ENERGY    # concept vs token

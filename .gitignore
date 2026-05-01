@@ -1,0 +1,36 @@
+# Database (contains real financial data)
+data/moneytrail.sqlite
+data/*.sqlite
+
+# Secrets (NEVER commit these)
+secrets/
+.env
+.env.*
+*.env
+
+# Raw knowledge content (may contain private source material)
+knowledge/raw/
+
+# Logs
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# macOS
+.DS_Store
+.AppleDouble
+
+# Editor
+.idea/
+.vscode/
+*.swp

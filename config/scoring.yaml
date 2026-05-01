@@ -1,0 +1,81 @@
+# Scoring thresholds and component definitions
+# All component sub-scores are normalised to [0, 100] before weighting
+
+signal_score:
+  weights:
+    investment_intent: 0.25
+    sentiment_strength: 0.15
+    source_quality: 0.20
+    specificity: 0.15
+    repetition: 0.15
+    community_confirmation: 0.10
+  # Confidence representation: categorical (high=80, medium=50, low=20)
+  confidence_map:
+    high: 80
+    medium: 50
+    low: 20
+  thresholds:
+    log_only: 0            # below this: just log the mention
+    watchlist: 30          # add to watchlist
+    quick_research: 50     # trigger level-2 research
+    deep_research: 70      # trigger level-3 full research pack
+    high_priority: 85      # trigger level-4 active tracking
+
+research_score:
+  weights:
+    fundamentals_usage_quality: 0.25
+    growth_adoption: 0.20
+    valuation_tokenomics: 0.15
+    money_flow: 0.15
+    risk_profile: 0.15
+    timing: 0.10
+  thresholds:
+    viable: 60             # minimum to proceed to thesis mapping
+    strong: 75
+
+thesis_fit_score:
+  weights:
+    core_thesis_alignment: 0.30
+    trend_strength: 0.20
+    evidence_quality: 0.20
+    valuation_entry_quality: 0.15
+    portfolio_usefulness: 0.15
+  thresholds:
+    weak: 50
+    moderate: 65
+    strong: 80
+
+entry_quality_score:
+  weights:
+    expected_upside: 0.25
+    risk_reward: 0.25
+    friction_adjusted_ev: 0.20
+    timing: 0.15
+    liquidity_exit_quality: 0.10
+    funding_tax_impact: 0.05
+  thresholds:
+    poor: 40
+    acceptable: 60
+    good: 75
+
+portfolio_score:
+  weights:
+    risk_adjusted_return: 0.30
+    thesis_alignment: 0.20
+    max_drawdown_control: 0.15
+    liquidity: 0.10
+    diversification: 0.10
+    dry_powder_discipline: 0.10
+    tax_friction_efficiency: 0.05
+
+crowding_score:
+  high_crowding_threshold: 70    # above this: flag euphoria risk
+
+# Evidence quality labels
+evidence_labels:
+  - verified_primary
+  - verified_secondary
+  - model_interpretation
+  - social_source_claim
+  - unknown
+  - assumption

@@ -1,0 +1,31 @@
+# Tradeability gate rules
+
+tradeability_rules:
+  require_tradeability_before_deep_research: true
+  allow_research_only_if_thesis_critical: true
+  require_region_eligibility_confirmation: true
+  block_trade_if_region_uncertain: true
+  refresh_universe_before_trade_decision: true
+  never_use_ticker_string_only: true
+  data_freshness_max_age_minutes: 360    # 6 hours — stale beyond this → STALE_DATA status
+
+venue:
+  primary: hyperliquid
+  supported_market_types:
+    - perp
+    - spot
+
+liquidity_gate:
+  min_24h_volume_usd: 10_000_000
+  min_open_interest_usd: 5_000_000
+  max_spread_bps: 20
+  max_price_impact_for_order_bps: 30
+
+# How often to refresh the Hyperliquid universe cache (hours)
+universe_refresh_interval_hours: 12
+
+# Assets in these categories are always research-only regardless of venue
+research_only_asset_types:
+  - equity
+  - etf
+  - commodity_physical   # physical gold/silver (no futures on Hyperliquid)

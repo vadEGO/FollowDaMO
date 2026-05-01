@@ -1,0 +1,53 @@
+# Investment thesis definitions and lifecycle
+
+theses:
+  scarce_assets:
+    display_name: Scarce Assets
+    description: Assets that benefit from scarcity, debasement, geopolitical uncertainty, supply constraints, or monetary instability
+    examples:
+      - BTC
+      - gold
+      - energy_infrastructure
+      - uranium
+      - power_grid_infrastructure
+      - scarce_digital_networks
+    evaluation_questions:
+      - Is supply structurally constrained?
+      - Is demand increasing?
+      - Does it protect purchasing power?
+      - Does it benefit from liquidity expansion or currency debasement?
+      - Is it politically and regulatorily resilient?
+      - Is there a tradeable expression of this thesis?
+
+  ai_growth:
+    display_name: AI Growth
+    description: Assets that benefit from AI infrastructure, automation, compute demand, productivity growth, robotics, data centres, energy demand
+    examples:
+      - AI_compute
+      - semiconductors
+      - networking
+      - data_centres
+      - power_grid
+      - cooling
+      - robotics_autonomy
+      - AI_software
+      - energy_storage
+    evaluation_questions:
+      - Is the asset a direct or second-order AI beneficiary?
+      - Is revenue already linked to AI demand?
+      - Is it exposed to compute, power, data, robotics, automation, or infrastructure?
+      - Is valuation already pricing in perfection?
+      - Is capex growth sustainable?
+      - Is the asset the best expression of the thesis?
+
+# Overlap rule: assets in both themes (e.g. energy/power/grid) count toward primary_thesis only
+overlap_rule: primary_thesis_only
+
+# Lifecycle stages
+lifecycle_stages:
+  - accumulating
+  - expansion
+  - crowded
+  - distribution
+  - declining
+  - recovering

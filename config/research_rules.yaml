@@ -1,0 +1,50 @@
+# Research prioritisation rules
+
+research_levels:
+  0: log_only
+  1: signal_card
+  2: quick_research
+  3: full_research_pack
+  4: active_thesis_tracking
+
+deep_research_triggers:
+  - signal_score_above_threshold     # threshold defined in scoring.yaml
+  - multiple_high_quality_sources    # min 2 sources, both quality_weight >= 0.75
+  - asset_is_already_owned
+  - asset_is_tradeable_and_liquid
+  - strong_negative_signal_on_owned_asset
+  - thesis_critical_asset
+  - user_explicit_request
+
+cost_controls:
+  max_deep_research_per_day: 3       # mirrors control_policy.yaml
+  min_hours_between_reruns: 72       # don't re-research same asset within 3 days
+  summarise_comments_before_use: true
+  deduplicate_repeated_claims: true
+
+crypto_minimum_requirements:
+  - market_cap
+  - fdv
+  - token_supply
+  - unlock_schedule
+  - liquidity
+  - exchange_availability
+  - tvl_fees_revenue
+  - holder_concentration
+  - developer_activity
+  - regulatory_security_risks
+  - funding_open_interest_if_perp
+
+equity_minimum_requirements:
+  - business_model
+  - revenue_growth
+  - cagr
+  - margins
+  - free_cash_flow
+  - debt
+  - valuation
+  - earnings_trend
+  - management_commentary
+  - insider_institutional_activity
+  - catalysts
+  - bear_case

@@ -1,0 +1,20 @@
+{
+  "generated_at": null,
+  "portfolio_heat": {
+    "score": null,
+    "status": "not_initialised",
+    "color": "gray",
+    "blocked_actions": []
+  },
+  "signal_radar": [],
+  "tradeability_board": [],
+  "thesis_board": [],
+  "lilo_board": [],
+  "allocation_board": [],
+  "model_audit_board": [],
+  "pending_approvals": [],
+  "pipeline_status": {
+    "last_run": null,
+    "stages_failed": []
+  }
+}

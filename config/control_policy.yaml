@@ -1,0 +1,41 @@
+# Master control policy — what the system is allowed to do
+# PHASE 1 defaults: execution disabled, research only
+
+mode:
+  execution: disabled
+  real_trade_requires_user_approval: true
+  max_research_cost_per_day_usd: 5.00
+  max_llm_calls_per_day: 100
+  max_deep_research_assets_per_day: 3
+  dry_run: false
+
+allowed_actions:
+  - ingest_sources
+  - extract_assets
+  - resolve_entities
+  - score_signals
+  - check_tradeability
+  - create_research_packs
+  - score_evidence
+  - map_theses
+  - assess_market_regime
+  - compute_portfolio_heat
+  - create_position_plans
+  - create_shadow_positions
+  - simulate_portfolios
+  - generate_rotation_candidates
+  - send_telegram_alerts
+  - update_here_now_dashboard
+
+blocked_actions:
+  - real_trade_execution
+  - leverage_increase
+  - wallet_transfer
+  - approve_token_spend
+  - export_private_keys
+  - automatic_order_placement
+
+pipeline:
+  restart_on_failure: true       # resume from last successful stage
+  log_level: info                # debug | info | warning | error
+  telegram_on_failure: true      # send error summary to Telegram

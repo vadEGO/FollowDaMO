@@ -1,0 +1,53 @@
+# Friction-adjusted entry gate rules
+
+friction_adjusted_entry:
+  enabled: true
+
+  minimum_gross_upside:
+    btc_core: 0.20
+    major_crypto: 0.30
+    high_beta_alt: 0.60
+    speculative_token: 1.00
+    high_growth_equity: 0.25
+    index_etf: 0.10
+
+  minimum_risk_reward:
+    btc_core: 2.0
+    major_crypto: 2.5
+    high_beta_alt: 3.0
+    speculative_token: 4.0
+    high_growth_equity: 2.0
+    index_etf: 1.5
+
+  max_friction_as_pct_of_expected_upside: 0.10
+
+  # Volatility buffer is computed from realized_30d_volatility * multiplier
+  # These are fallback multipliers when price_history is unavailable
+  volatility_buffer_multiplier:
+    btc_core: 0.40
+    major_crypto: 0.50
+    high_beta_alt: 0.65
+    speculative_token: 0.80
+    high_growth_equity: 0.45
+    index_etf: 0.25
+
+  # Fallback static buffers (used only when no price history exists)
+  volatility_buffer_static:
+    btc_core: 0.08
+    major_crypto: 0.12
+    high_beta_alt: 0.20
+    speculative_token: 0.30
+    high_growth_equity: 0.10
+    index_etf: 0.04
+
+cost_stack:
+  - entry_fee
+  - exit_fee
+  - spread
+  - slippage
+  - funding
+  - borrow_margin_cost
+  - fx_cost
+  - tax_friction_estimate
+  - opportunity_cost
+  - volatility_buffer
