@@ -86,7 +86,109 @@ def collect_local_folder(source: dict, conn, dry_run: bool) -> int:
     return count
 
 
+def _apply_migration(conn) -> None:
+    """Ensure migration 002 tables exist (idempotent)."""
+    migration_path = ROOT / "migrations" / "002_patreon_comments.sql"
+    if not migration_path.exists():
+        return
+    already = conn.execute(
+        "SELECT 1 FROM schema_version WHERE version = 2"
+    ).fetchone()
+    if already:
+        return
+    sql = migration_path.read_text()
+    for stmt in sql.split(";"):
+        stmt = stmt.strip()
+        if stmt:
+            try:
+                conn.execute(stmt)
+            except Exception:
+                pass  # CREATE IF NOT EXISTS — safe to ignore duplicates
+
+
+def _store_comments(conn, post_url: str, source_name: str,
+                    post_title: str, comments: list[dict]) -> int:
+    """
+    Persist comments to patreon_comments, deduplicated by content_hash.
+    Updates patreon_scrape_state with the latest scrape timestamp.
+    Returns number of new comments stored.
+    """
+    now = datetime.datetime.utcnow().isoformat()
+    conn.execute(
+        """INSERT INTO patreon_scrape_state
+               (post_url, source_name, post_title, comments_last_scraped_at, comment_count)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(post_url) DO UPDATE SET
+               comments_last_scraped_at = excluded.comments_last_scraped_at,
+               comment_count = excluded.comment_count""",
+        (post_url, source_name, post_title, now, len(comments)),
+    )
+    new_count = 0
+    for c in comments:
+        existing = conn.execute(
+            "SELECT id FROM patreon_comments WHERE content_hash = ?",
+            (c["content_hash"],),
+        ).fetchone()
+        if existing:
+            continue
+        conn.execute(
+            """INSERT INTO patreon_comments
+                   (id, post_url, source_name, author, comment_text,
+                    published_at, content_hash, scraped_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                str(uuid.uuid4()),
+                post_url,
+                source_name,
+                c["author"],
+                c["text"],
+                c.get("published_at"),
+                c["content_hash"],
+                now,
+            ),
+        )
+        new_count += 1
+    return new_count
+
+
+def _append_comments_to_knowledge_file(
+    source_name: str, post: dict
+) -> None:
+    """
+    Append any new comments to the post's knowledge-base Markdown file.
+    Looks for the most-recently-written file for this post URL.
+    """
+    if not post.get("comments"):
+        return
+    safe_title = "".join(
+        c for c in post["title"][:50] if c.isalnum() or c in " -_"
+    )
+    creator_slug = post["url"].split("/")[4] if post["url"].count("/") >= 4 else source_name
+    kb_dir = ROOT / "knowledge" / "raw" / creator_slug
+    if not kb_dir.exists():
+        return
+    # Find the file that was written for this post today (or any date)
+    candidates = sorted(kb_dir.glob(f"*{safe_title.replace(' ', '_')}*.md"), reverse=True)
+    if not candidates:
+        return
+    target = candidates[0]
+    existing = target.read_text()
+    comment_header = "\n---\n## Comments"
+    # Strip old comment section if present so we don't double-append
+    if comment_header in existing:
+        existing = existing[: existing.index(comment_header)]
+    lines = [existing.rstrip(), "", "---", f"## Comments ({len(post['comments'])})", ""]
+    for c in post["comments"]:
+        ts = f" — {c['published_at']}" if c.get("published_at") else ""
+        lines.append(f"**{c['author']}**{ts}")
+        lines.append(c["text"])
+        lines.append("")
+    target.write_text("\n".join(lines))
+
+
 def collect_patreon(source: dict, conn, dry_run: bool) -> int:
+    _apply_migration(conn)
+
     cookies_env = os.getenv("PATREON_COOKIES_FILE", "secrets/patreon_cookies.json")
     cookies_path = ROOT / cookies_env
     if not cookies_path.exists():
@@ -94,20 +196,42 @@ def collect_patreon(source: dict, conn, dry_run: bool) -> int:
         return 0
 
     from scrape_patreon import scrape_creator
+    include_comments = source.get("include_comments", False)
+    comment_days = source.get("comment_days", 2)
+
     posts = scrape_creator(
         creator_url=source["creator_url"],
         cookies_path=cookies_path,
         limit=source.get("max_posts_per_run", 10),
         since_days=source.get("poll_interval_hours", 24) // 24 + 1,
         dry_run=dry_run,
+        include_comments=include_comments,
+        comment_days=comment_days,
     )
     count = 0
     for post in posts:
+        # Build the full Markdown document (post body + comments) once.
+        # This is what gets stored in both the DB and the knowledge file.
+        from scrape_patreon import _format_post_md
+        full_md = _format_post_md(post)
+
         record_id = _store(conn, source["name"], "patreon",
                            post["title"], post["author"],
-                           post["url"], post["published_at"], post["text"])
+                           post["url"], post["published_at"], full_md)
         if record_id:
             count += 1
+        elif not dry_run and post.get("comments"):
+            # Post already seen but comments may be new — update the file
+            _append_comments_to_knowledge_file(source["name"], post)
+
+        # Persist individual comments to the comments table for querying
+        if not dry_run and post.get("comments"):
+            new_comments = _store_comments(
+                conn, post["url"], source["name"], post["title"], post["comments"]
+            )
+            if new_comments:
+                print(f"      +{new_comments} new comments for: {post['title'][:50]}")
+
     return count
 
 

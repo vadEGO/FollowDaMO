@@ -29,6 +29,8 @@ sources:
     source_category: discovery
     poll_interval_hours: 24
     max_posts_per_run: 10
+    include_comments: true      # scrape comments on each post
+    comment_days: 2             # only scrape comments on posts from the last N days
 
   - name: realvision_patreon
     type: patreon
@@ -39,6 +41,8 @@ sources:
     source_category: discovery
     poll_interval_hours: 24
     max_posts_per_run: 10
+    include_comments: true
+    comment_days: 2
 
   # YOUTUBE — no credentials needed for public videos (transcript API)
   - name: youtube_transcripts
@@ -49,7 +53,7 @@ sources:
     quality_weight: 0.70
     source_category: discovery
     poll_interval_hours: 24
-    include_comments: false     # comments = euphoria only, never viability
+    include_comments: false     # not implemented for YouTube; comments = euphoria only
 
   # RSS / NEWSLETTER
   - name: jordi_visser_substack
