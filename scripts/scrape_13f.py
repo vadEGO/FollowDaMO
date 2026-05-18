@@ -276,33 +276,46 @@ def parse_holdings_xml(accession_number: str, cik: str) -> list[dict]:
     """
     Download and parse the InfoTable XML from an EDGAR 13F filing.
     Returns list of position dicts.
-    """
-    cik_padded = cik.zfill(10)
-    acc_clean  = accession_number.replace("-", "")
-    index_url  = f"https://www.sec.gov/Archives/edgar/data/{int(cik_padded)}/{acc_clean}/{accession_number}-index.json"
 
-    index = _get(index_url)
-    if not isinstance(index, dict):
-        # Try fetching the index HTML to find the XML file
-        index_html = _get(f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik_padded}&type=13F-HR&dateb=&owner=include&count=1&search_text=")
-        log.debug(f"Index fetch fallback for {accession_number}")
+    EDGAR filing structure: directory listing at
+    https://www.sec.gov/Archives/edgar/data/{cik}/{acc_nodash}/
+    We parse the HTML directory listing to find the InfoTable XML file.
+    """
+    cik_int   = str(int(cik))           # strip leading zeros for URL path
+    acc_clean = accession_number.replace("-", "")
+    dir_url   = f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_clean}/"
+
+    dir_html = _get(dir_url, headers={**_edgar_headers(), "Accept": "text/html"})
+    if not isinstance(dir_html, str):
+        log.warning(f"Could not fetch filing directory: {dir_url}")
         return []
 
-    # Find the infotable XML file
+    # Find InfoTable XML — named variously: infotable.xml, *13F*.xml, *holdings*.xml
+    # Fall back to any .xml that isn't the primary_doc wrapper
     xml_filename = None
-    for doc in index.get("directory", {}).get("item", []):
-        name = doc.get("name", "")
-        if "infotable" in name.lower() and name.endswith(".xml"):
-            xml_filename = name
+    for pattern in [
+        r'href="(/Archives/edgar/data/[^"]+infotable[^"]+\.xml)"',
+        r'href="(/Archives/edgar/data/[^"]+13[fF][^"]+\.xml)"',
+        r'href="(/Archives/edgar/data/[^"]+hold[^"]+\.xml)"',
+        r'href="(/Archives/edgar/data/[^"]+\.xml)"',
+    ]:
+        matches = re.findall(pattern, dir_html, re.I)
+        # Skip the primary_doc.xml wrapper — it's metadata, not holdings
+        for m in matches:
+            if "primary_doc" not in m.lower():
+                xml_filename = m
+                break
+        if xml_filename:
             break
 
     if not xml_filename:
-        log.warning(f"No infotable XML found in {accession_number}")
+        log.warning(f"No InfoTable XML found in {dir_url}")
         return []
 
-    time.sleep(0.15)  # stay well under 10 req/sec EDGAR limit
-    xml_url = f"https://www.sec.gov/Archives/edgar/data/{int(cik_padded)}/{acc_clean}/{xml_filename}"
-    xml_text = _get(xml_url)
+    log.debug(f"InfoTable XML: {xml_filename}")
+    time.sleep(0.2)  # stay well under 10 req/sec EDGAR limit
+    xml_url = f"https://www.sec.gov{xml_filename}"
+    xml_text = _get(xml_url, headers={**_edgar_headers(), "Accept": "text/xml,application/xml"})
     if not isinstance(xml_text, str):
         return []
 
@@ -313,37 +326,45 @@ def _parse_infotable_xml(xml_text: str) -> list[dict]:
     """Parse SEC 13F InfoTable XML into position dicts."""
     positions = []
     try:
-        # Remove namespace prefix for easier parsing
-        xml_clean = re.sub(r' xmlns[^"]*"[^"]*"', "", xml_text)
-        xml_clean = re.sub(r"<ns\d+:", "<", xml_clean)
-        xml_clean = re.sub(r"</ns\d+:", "</", xml_clean)
+        # Strip all namespace declarations and prefixes for simple tag access
+        xml_clean = re.sub(r'\s+xmlns(?::\w+)?="[^"]*"', "", xml_text)
+        xml_clean = re.sub(r"<(\w+):([^>\s/]+)", r"<\2", xml_clean)
+        xml_clean = re.sub(r"</(\w+):([^>]+)>", r"</\2>", xml_clean)
 
         root = ET.fromstring(xml_clean)
-        ns = {"n": ""}
 
         for info in root.iter("infoTable"):
             def _t(tag: str) -> str:
                 el = info.find(tag)
                 return (el.text or "").strip() if el is not None else ""
 
-            ticker = _t("ticker")
+            # EDGAR InfoTable has no ticker field — only CUSIP and company name.
+            # We store the company name as company_name and leave ticker blank.
+            # A future step can resolve CUSIP → ticker via a lookup API.
             cusip  = _t("cusip")
             name   = _t("nameOfIssuer")
-            shares_str = _t("sshPrnamt") or _t("shrsOrPrnAmt")
-            value_str  = _t("value")         # thousands of USD in EDGAR
+            # shares are nested: <shrsOrPrnAmt><sshPrnamt>N</sshPrnamt>...
+            shr_el = info.find("shrsOrPrnAmt")
+            shares_str = ""
+            if shr_el is not None:
+                sph = shr_el.find("sshPrnamt")
+                if sph is not None:
+                    shares_str = (sph.text or "").strip()
+            value_str  = _t("value")
 
             try:
                 shares = float(shares_str) if shares_str else None
             except ValueError:
                 shares = None
             try:
-                # EDGAR value is in thousands
-                market_value = float(value_str) * 1000 if value_str else None
+                # EDGAR value field is in dollars (not thousands — despite old docs saying thousands,
+                # modern 13F-HR filings use whole dollars; verify: APLD position = ~$278M matches real data)
+                market_value = float(value_str) if value_str else None
             except ValueError:
                 market_value = None
 
             positions.append({
-                "ticker":          ticker or None,
+                "ticker":          None,       # EDGAR InfoTable has no ticker; use company_name
                 "cusip":           cusip or None,
                 "company_name":    name,
                 "shares":          shares,
@@ -553,12 +574,16 @@ def format_digest(
         ]
 
     def _pos_line(p: dict, show_change: bool = False) -> str:
-        ticker = p.get("ticker") or f"CUSIP:{p.get('cusip', '?')}"
         name   = p.get("company_name", "")
+        ticker = p.get("ticker")
+        # Use company name as primary label; show ticker if available, else CUSIP
+        if ticker:
+            label = f"**{ticker}** ({name})" if name else f"**{ticker}**"
+        else:
+            label = f"**{name}**" if name else f"CUSIP:{p.get('cusip', '?')}"
         shares = _fmt_shares(p.get("shares"))
         value  = _fmt_money(p.get("market_value_usd"))
         pct    = f"{p.get('portfolio_pct') or 0:.2f}%"
-        label  = f"**{ticker}** ({name})" if name else f"**{ticker}**"
 
         if show_change and p.get("shares_change") is not None:
             chg = p["shares_change"]
@@ -587,9 +612,9 @@ def format_digest(
     if exited:
         lines += [f"## Exited Positions ({len(exited)})", ""]
         for p in exited[:max_positions]:
-            ticker = p.get("ticker") or f"CUSIP:{p.get('cusip', '?')}"
             name   = p.get("company_name", "")
-            label  = f"**{ticker}** ({name})" if name else f"**{ticker}**"
+            ticker = p.get("ticker")
+            label  = f"**{ticker}** ({name})" if ticker else (f"**{name}**" if name else f"CUSIP:{p.get('cusip', '?')}")
             lines.append(f"- {label}")
         lines.append("")
 
