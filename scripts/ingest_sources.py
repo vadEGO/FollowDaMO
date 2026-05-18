@@ -8,6 +8,7 @@ Implements: agents/source_collector.md
 import argparse
 import datetime
 import hashlib
+import json
 import os
 import sys
 import uuid
@@ -272,11 +273,140 @@ def collect_rss(source: dict, conn, dry_run: bool) -> int:
     return count
 
 
+def collect_sec13f(source: dict, conn, dry_run: bool) -> int:
+    """
+    Collect SEC 13F institutional filings for configured filers.
+    Uses SEC EDGAR as primary source (free); WhaleWisdom as optional enhancement.
+
+    Required source config fields:
+      filer_slug      — fund name slug matching EDGAR (e.g. situational-awareness-lp)
+      filer_cik       — SEC CIK number (auto-discovered if blank)
+      edgar_user_agent — required: "YourName/App email@example.com"
+
+    Optional:
+      max_positions_per_digest — default 50; caps positions per Markdown section
+      include_unchanged        — default false; skip unchanged positions
+    """
+    from scrape_13f import scrape_filer as scrape_13f
+
+    filer_slug = source.get("filer_slug", "")
+    if not filer_slug:
+        print(f"    [{source['name']}] No filer_slug configured — skipping")
+        return 0
+
+    # edgar_user_agent can be in source config or env
+    user_agent = source.get("edgar_user_agent", "") or os.getenv("EDGAR_USER_AGENT", "")
+    if not user_agent:
+        print(
+            f"    [{source['name']}] EDGAR_USER_AGENT not set.\n"
+            "      Add to secrets/.env: EDGAR_USER_AGENT=YourName/MoneyTrail your@email.com"
+        )
+        return 0
+    os.environ["EDGAR_USER_AGENT"] = user_agent
+
+    posts = scrape_13f(
+        filer_slug=filer_slug,
+        filer_cik=source.get("filer_cik") or None,
+        max_positions=source.get("max_positions_per_digest", 50),
+        include_unchanged=source.get("include_unchanged", False),
+        dry_run=dry_run,
+    )
+
+    count = 0
+    for post in posts:
+        record_id = _store(
+            conn, source["name"], "sec_13f",
+            post["title"], post["author"],
+            post["url"], post.get("published_at"), post["text"],
+        )
+        if record_id:
+            count += 1
+            # Persist structured positions to sec_13f_positions table
+            if not dry_run:
+                _store_13f_positions(conn, post)
+                _update_13f_state(conn, post)
+            print(f"      + {post['title']}")
+
+    return count
+
+
+def _store_13f_positions(conn, post: dict) -> None:
+    """Upsert structured position rows into sec_13f_positions."""
+    snapshot = post.get("raw_snapshot")
+    if not snapshot:
+        return
+    try:
+        positions = json.loads(snapshot) if isinstance(snapshot, str) else snapshot
+    except Exception:
+        return
+
+    now = datetime.datetime.utcnow().isoformat()
+    filer_slug = post.get("filer_slug", "")
+    quarter    = post.get("quarter", "")
+
+    for pos in positions:
+        conn.execute(
+            """INSERT OR IGNORE INTO sec_13f_positions
+               (id, filer_slug, filer_name, quarter, ticker, cusip, company_name,
+                shares, market_value_usd, portfolio_pct, shares_change, change_type,
+                sector, industry, avg_price, quarter_first_owned, scraped_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                str(uuid.uuid4()),
+                filer_slug,
+                post.get("author", "").split("/")[-1].replace("-", " ").title(),
+                quarter,
+                pos.get("ticker"),
+                pos.get("cusip"),
+                pos.get("company_name"),
+                pos.get("shares"),
+                pos.get("market_value_usd"),
+                pos.get("portfolio_pct"),
+                pos.get("shares_change"),
+                pos.get("change_type"),
+                pos.get("sector"),
+                pos.get("industry"),
+                pos.get("avg_price"),
+                pos.get("quarter_first_owned"),
+                now,
+            ),
+        )
+
+
+def _update_13f_state(conn, post: dict) -> None:
+    """Update sec_13f_scrape_state after a successful scrape."""
+    now = datetime.datetime.utcnow().isoformat()
+    conn.execute(
+        """INSERT INTO sec_13f_scrape_state
+               (filer_slug, filer_name, filer_cik, last_quarter, last_raw_snapshot,
+                last_scraped_at, position_count, consecutive_failures)
+           VALUES (?,?,?,?,?,?,?,0)
+           ON CONFLICT(filer_slug) DO UPDATE SET
+               filer_cik          = excluded.filer_cik,
+               last_quarter       = excluded.last_quarter,
+               last_raw_snapshot  = excluded.last_raw_snapshot,
+               last_scraped_at    = excluded.last_scraped_at,
+               position_count     = excluded.position_count,
+               last_error         = NULL,
+               consecutive_failures = 0""",
+        (
+            post.get("filer_slug", ""),
+            post.get("author", "").split("/")[-1].replace("-", " ").title(),
+            post.get("cik"),
+            post.get("quarter"),
+            post.get("raw_snapshot"),
+            now,
+            post.get("position_count", 0),
+        ),
+    )
+
+
 COLLECTORS = {
     "local_folder": collect_local_folder,
-    "patreon": collect_patreon,
-    "youtube": collect_youtube,
-    "rss": collect_rss,
+    "patreon":      collect_patreon,
+    "youtube":      collect_youtube,
+    "rss":          collect_rss,
+    "sec_13f":      collect_sec13f,
 }
 
 

@@ -74,6 +74,7 @@ def check(conn: sqlite3.Connection) -> bool:
         "real_positions", "simulation_results", "rotation_candidates",
         "model_decision_outcomes", "source_scores",
         "patreon_scrape_state", "patreon_comments",
+        "sec_13f_positions", "sec_13f_scrape_state",
     ]
     missing = [t for t in expected if t not in tables]
     if missing:

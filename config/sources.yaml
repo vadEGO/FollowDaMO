@@ -8,6 +8,7 @@
 #   rss            — parse RSS/Atom feed
 #   twitter_list   — scrape X/Twitter list (requires cookies or API key)
 #   manual         — user pastes content via CLI
+#   sec_13f        — SEC 13F institutional holding filings (EDGAR primary, WhaleWisdom optional)
 
 sources:
 
@@ -63,3 +64,22 @@ sources:
     quality_weight: 0.80
     source_category: discovery
     poll_interval_hours: 24
+
+  # SEC 13F FILINGS — institutional holding disclosures
+  # Signal type: CONFIRMATION (45-135 day lag)
+  # Use to validate theses already in the pipeline, NOT to initiate positions.
+  # Requires: EDGAR_USER_AGENT in secrets/.env (format: "Name/App email@domain.com")
+  # Optional: WHALEWISDOM_ACCESS_KEY + WHALEWISDOM_SECRET_KEY for enhanced data
+
+  - name: situational_awareness_13f
+    type: sec_13f
+    filer_slug: situational-awareness-lp  # matches EDGAR filing name
+    filer_cik: ""                          # auto-discovered; set to speed up: e.g. "0001802256"
+    enabled: false                         # enable after setting EDGAR_USER_AGENT
+    edgar_user_agent: ""                   # override env var here or set EDGAR_USER_AGENT in secrets/.env
+    quality_weight: 0.45                   # high data accuracy, but 45-135 day lag lowers signal utility
+    source_category: confirmation          # NOT discovery — confirms existing theses only
+    poll_interval_hours: 168               # weekly poll; filings are quarterly
+    include_unchanged: false               # skip unchanged positions in digest (reduces noise)
+    max_positions_per_digest: 50           # chunk limit — prevents LLM context overflow
+    edgar_fallback: true                   # use SEC EDGAR if WhaleWisdom unavailable
