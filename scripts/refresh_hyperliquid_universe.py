@@ -78,14 +78,13 @@ def main():
     now = datetime.datetime.utcnow().isoformat()
     upserted = 0
 
-    # Perp assets
-    for asset_meta in meta["perp"].get("universe", []):
+    # Perp assets — index in the universe array IS the Hyperliquid asset ID
+    for perp_idx, asset_meta in enumerate(meta["perp"].get("universe", [])):
         symbol = asset_meta.get("name", "")
-        asset_id = asset_meta.get("szDecimals", 0)  # Hyperliquid uses index as ID
         price = float(prices.get(symbol, 0) or 0)
         row = (
             f"hl_perp_{symbol}", "hyperliquid", "perp", symbol,
-            upserted,  # asset_id (index)
+            perp_idx,  # asset_id: position in universe array = Hyperliquid asset ID
             symbol, "USD",
             1, 1,  # is_listed, is_tradeable
             float(asset_meta.get("minSize", 0) or 0),
