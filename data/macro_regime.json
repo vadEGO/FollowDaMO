@@ -1,0 +1,31 @@
+{
+  "last_updated": "2026-05-25T12:15:16.222374+00:00",
+  "updated_by": "vegorov",
+  "active_season": "summer",
+  "active_phase": "exp",
+  "season_conviction": "medium",
+  "phase_conviction": "high",
+  "season_notes": "Oil inventory draws accelerating, rates rising = inflationary pressure. Growth still expanding.",
+  "phase_notes": "US + most EM in EXP. Japan/UK showing SLO divergence.",
+  "country_phases": {
+    "us": "exp",
+    "canada": "exp",
+    "uk": "slo",
+    "euro_zone": "slo",
+    "germany": "slo",
+    "france": "slo",
+    "italy": "slo",
+    "spain": "slo",
+    "major_5_asia": "exp",
+    "china": "rec",
+    "india": "exp",
+    "indonesia": "slo",
+    "japan": "exp",
+    "south_korea": "exp",
+    "australia": "exp",
+    "south_africa": "slo",
+    "brazil": "exp",
+    "mexico": "exp",
+    "global": "exp"
+  }
+}

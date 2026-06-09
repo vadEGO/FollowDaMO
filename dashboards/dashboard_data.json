@@ -8,7 +8,88 @@
   },
   "signal_radar": [],
   "tradeability_board": [],
-  "thesis_board": [],
+  "thesis_board": [
+    {
+      "thesis": "scarce_assets",
+      "display_name": "Scarce Assets",
+      "strength": 0.75,
+      "lifecycle_stage": "accumulating",
+      "crowding_score": 0.4,
+      "is_placeholder": true,
+      "top_expressions": [
+        {
+          "symbol": "BTC",
+          "score": 0.75,
+          "is_placeholder": true
+        }
+      ]
+    },
+    {
+      "thesis": "ai_growth",
+      "display_name": "AI Growth",
+      "strength": 0.75,
+      "lifecycle_stage": "accumulating",
+      "crowding_score": 0.4,
+      "is_placeholder": true,
+      "top_expressions": [
+        {
+          "symbol": "ETH",
+          "score": 0.75,
+          "is_placeholder": true
+        },
+        {
+          "symbol": "RENDER",
+          "score": 0.75,
+          "is_placeholder": true
+        },
+        {
+          "symbol": "TAO",
+          "score": 0.75,
+          "is_placeholder": true
+        }
+      ]
+    },
+    {
+      "thesis": "crypto_beta",
+      "display_name": "Crypto Beta",
+      "strength": 0.75,
+      "lifecycle_stage": "accumulating",
+      "crowding_score": 0.4,
+      "is_placeholder": true,
+      "top_expressions": [
+        {
+          "symbol": "SOL",
+          "score": 0.75,
+          "is_placeholder": true
+        },
+        {
+          "symbol": "JUP",
+          "score": 0.75,
+          "is_placeholder": true
+        },
+        {
+          "symbol": "SUI",
+          "score": 0.75,
+          "is_placeholder": true
+        }
+      ]
+    },
+    {
+      "thesis": "tactical_satellite",
+      "display_name": "Tactical Satellite",
+      "strength": 0.75,
+      "lifecycle_stage": "accumulating",
+      "crowding_score": 0.4,
+      "is_placeholder": true,
+      "top_expressions": [
+        {
+          "symbol": "WIF",
+          "score": 0.75,
+          "is_placeholder": true
+        }
+      ]
+    }
+  ],
   "lilo_board": [],
   "allocation_board": [],
   "model_audit_board": [],

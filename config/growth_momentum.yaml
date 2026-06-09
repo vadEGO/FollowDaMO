@@ -1,0 +1,44 @@
+# Growth Momentum framework — RealVision business cycle phases per country
+
+phases:
+  rec:
+    label: Recovery
+    color: "#22c55e"
+    chip_variant: green
+    description: Economic growth recovering but below trend.
+  exp:
+    label: Expansion
+    color: "#f59e0b"
+    chip_variant: amber
+    description: Economic growth accelerating and above trend.
+  slo:
+    label: Slowdown
+    color: "#f97316"
+    chip_variant: red
+    description: Economic growth above trend but slowing.
+  con:
+    label: Contraction
+    color: "#ef4444"
+    chip_variant: red
+    description: Economic growth below trend and decelerating.
+
+regions:
+  - us
+  - canada
+  - uk
+  - euro_zone
+  - germany
+  - france
+  - italy
+  - spain
+  - major_5_asia
+  - china
+  - india
+  - indonesia
+  - japan
+  - south_korea
+  - australia
+  - south_africa
+  - brazil
+  - mexico
+  - global

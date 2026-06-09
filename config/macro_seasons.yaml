@@ -1,0 +1,98 @@
+# Macro Seasons framework — RealVision 4-quadrant model (growth × inflation)
+
+seasons:
+  spring:
+    label: Spring
+    subtitle: Disinflationary Boom
+    description: Rising growth, falling inflation. Early-cycle. CB easing, yield curve bull steepens.
+    color: "#22c55e"
+    emoji: "🌸"
+    growth: rising
+    inflation: falling
+    asset_playbook:
+      equities: up
+      credit: up
+      commodities: down
+      bonds: down
+      cash: down
+      crypto: up
+      sectors_favor: [technology, consumer_discretionary, semiconductors, homebuilders]
+      sectors_avoid: [energy, utilities, healthcare, gold_miners]
+      bonds_favor: [us_hy, us_ig]
+      bonds_avoid: [tips, long_duration]
+      fx_favor: [eur, gbp, aud]
+      fx_avoid: [dxy, chf]
+      commodities_favor: [copper, lumber, soybeans]
+      commodities_avoid: [gold, nat_gas]
+
+  summer:
+    label: Summer
+    subtitle: Inflationary Boom
+    description: Rising growth, rising inflation. Mid-cycle. Liquidity flood, tighter risk premiums.
+    color: "#f59e0b"
+    emoji: "☀️"
+    growth: rising
+    inflation: rising
+    asset_playbook:
+      equities: up
+      credit: up
+      commodities: up
+      bonds: down
+      cash: down
+      crypto: up
+      sectors_favor: [energy, materials, industrials, financials, semiconductors]
+      sectors_avoid: [consumer_staples, utilities, real_estate]
+      bonds_favor: [tips, em_bonds]
+      bonds_avoid: [long_duration, us_ig]
+      fx_favor: [cad, aud, krw]
+      fx_avoid: [dxy, jpy]
+      commodities_favor: [oil, copper, silver, soybeans, cotton]
+      commodities_avoid: [bonds, cash]
+
+  fall:
+    label: Fall
+    subtitle: Stagflation
+    description: Slowing growth, rising inflation. Late-cycle. CB hawkish, risk premiums widening.
+    color: "#f97316"
+    emoji: "🍂"
+    growth: falling
+    inflation: rising
+    asset_playbook:
+      equities: down
+      credit: down
+      commodities: up
+      bonds: neutral
+      cash: up
+      crypto: down
+      sectors_favor: [energy, gold_miners, materials]
+      sectors_avoid: [technology, consumer_discretionary, homebuilders, regionals]
+      bonds_favor: [tips, short_duration]
+      bonds_avoid: [credit, em_bonds]
+      fx_favor: [dxy, chf, jpy]
+      fx_avoid: [aud, krw, mxn, brl]
+      commodities_favor: [gold, oil, nat_gas, silver]
+      commodities_avoid: [lumber, copper]
+
+  winter:
+    label: Winter
+    subtitle: Deflationary Bust
+    description: Slowing growth, slowing inflation. Slowdown/recession. Wide output gap, monetary drag.
+    color: "#60a5fa"
+    emoji: "❄️"
+    growth: falling
+    inflation: falling
+    asset_playbook:
+      equities: down
+      credit: neutral
+      commodities: down
+      bonds: up
+      cash: up
+      crypto: down
+      sectors_favor: [healthcare, consumer_staples, utilities, quality]
+      sectors_avoid: [energy, materials, financials, small_caps]
+      bonds_favor: [long_duration, us_ig, tips]
+      bonds_avoid: [us_hy, em_bonds, credit]
+      fx_favor: [dxy, jpy, chf]
+      fx_avoid: [aud, krw, mxn, brl]
+      commodities_favor: [gold]
+      commodities_avoid: [oil, copper, industrial_metals]
