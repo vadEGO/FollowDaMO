@@ -11,6 +11,7 @@ Usage:
 """
 import argparse
 import datetime
+import json
 import sqlite3
 import subprocess
 import sys
@@ -32,9 +33,58 @@ STAGES = [
     "update_thesis_memory",
     "update_shadow_portfolios",
     "refresh_prices",
+    "score_macro_fit",     # tag trade ideas as macro tailwind/neutral/headwind vs active regime
     "generate_daily_digest",
     "update_here_now",
+    "sync_supabase",       # stage 15: push to Supabase for MoneyTrailDash (skips if key not set)
 ]
+
+DASHBOARD_JSON = ROOT / "dashboards" / "dashboard_data.json"
+
+
+def _stamp_pipeline_start() -> None:
+    """Write currently_running=true + generated_at at pipeline start.
+    Frontend uses this to detect stuck pipelines (running > 2h = hard error banner)."""
+    data: dict = {}
+    if DASHBOARD_JSON.exists():
+        try:
+            data = json.loads(DASHBOARD_JSON.read_text())
+        except Exception:
+            pass
+    data["generated_at"] = datetime.datetime.utcnow().isoformat() + "Z"
+    data["currently_running"] = True
+    DASHBOARD_JSON.parent.mkdir(exist_ok=True)
+    DASHBOARD_JSON.write_text(json.dumps(data, indent=2))
+
+
+def _stamp_pipeline_end() -> None:
+    """Flip currently_running to false when pipeline completes (success or fail)."""
+    if not DASHBOARD_JSON.exists():
+        return
+    try:
+        data = json.loads(DASHBOARD_JSON.read_text())
+        data["currently_running"] = False
+        DASHBOARD_JSON.write_text(json.dumps(data, indent=2))
+    except Exception:
+        pass
+
+
+def _check_real_positions(conn: sqlite3.Connection) -> None:
+    """Warn if real_positions is empty on a non-first run.
+    Empty real_positions → portfolio heat = 0 → all entries appear safe (wrong)."""
+    count = conn.execute("SELECT COUNT(*) FROM real_positions").fetchone()[0]
+    if count > 0:
+        return
+    prev_runs = conn.execute(
+        "SELECT COUNT(*) FROM pipeline_runs WHERE status = 'completed'"
+    ).fetchone()[0]
+    if prev_runs > 0:
+        print(
+            "\n⚠️  WARNING: real_positions table is empty but previous pipeline runs exist.\n"
+            "   Portfolio heat will read 0 (all entries appear safe — this is INCORRECT).\n"
+            "   Populate real_positions before running or use --skip-positions-check to override.\n"
+        )
+
 
 STAGE_SCRIPTS = {
     "ingest_sources":                "scripts/ingest_sources.py",
@@ -49,8 +99,10 @@ STAGE_SCRIPTS = {
     "update_thesis_memory":          "scripts/update_thesis_memory.py",
     "update_shadow_portfolios":      "scripts/simulate_portfolios.py",
     "refresh_prices":                "scripts/refresh_prices.py",
+    "score_macro_fit":               "scripts/score_macro_fit.py --write",
     "generate_daily_digest":         "scripts/generate_daily_digest.py",
     "update_here_now":               "scripts/generate_daily_digest.py --here-now-only",
+    "sync_supabase":                 "scripts/sync_to_supabase.py",
 }
 
 
@@ -126,6 +178,8 @@ def main() -> None:
     parser.add_argument("--status", action="store_true")
     parser.add_argument("--from", dest="from_stage", help="Resume from stage")
     parser.add_argument("--only", help="Run only this stage")
+    parser.add_argument("--skip-positions-check", action="store_true",
+                        help="Skip the real_positions empty-table warning")
     args = parser.parse_args()
 
     if args.status:
@@ -138,6 +192,14 @@ def main() -> None:
 
     conn = get_conn()
     today_stages = get_today_stages(conn)
+
+    if not args.skip_positions_check and not args.dry_run:
+        _check_real_positions(conn)
+
+    # Stamp pipeline start: sets generated_at + currently_running=true in dashboard JSON
+    # so the frontend can detect a stuck pipeline (running > 2h = hard error banner)
+    if not args.dry_run:
+        _stamp_pipeline_start()
 
     start_from = args.from_stage or STAGES[0]
     if start_from not in STAGES:
@@ -169,6 +231,9 @@ def main() -> None:
             break  # halt pipeline on failure — restartable from this stage
 
     conn.close()
+
+    if not args.dry_run:
+        _stamp_pipeline_end()
 
     if failed:
         print("\nPipeline halted on failure. Fix the issue and re-run.")
