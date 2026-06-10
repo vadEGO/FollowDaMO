@@ -33,6 +33,7 @@ STAGES = [
     "update_thesis_memory",
     "update_shadow_portfolios",
     "refresh_prices",
+    "evaluate_outcomes",   # self-evolving: score closed outcomes, calibrate source weights
     "score_macro_fit",     # tag trade ideas as macro tailwind/neutral/headwind vs active regime
     "score_technical",     # score each symbol's technical posture from market_candles
     "build_portfolio",     # size composite-ranked ideas vs thesis budgets + portfolio heat
@@ -101,6 +102,7 @@ STAGE_SCRIPTS = {
     "update_thesis_memory":          "scripts/update_thesis_memory.py",
     "update_shadow_portfolios":      "scripts/simulate_portfolios.py",
     "refresh_prices":                "scripts/refresh_prices.py",
+    "evaluate_outcomes":             "scripts/evaluate_outcomes.py --calibrate",
     "score_macro_fit":               "scripts/score_macro_fit.py --write",
     "score_technical":               "scripts/score_technical.py --write",
     "build_portfolio":               "scripts/build_portfolio.py --write",
