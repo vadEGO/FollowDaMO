@@ -104,13 +104,21 @@ def upsert_thesis_scores(
         symbol = asset.get("symbol", "")
         research_score = research_scores.get(symbol)
         is_placeholder = research_score is None
-        score = research_score if research_score is not None else DEFAULT_SCORE
+
+        # Normalise everything onto a single 0-1 scale up front. Research-pack
+        # thesis_fit_score arrives on a 0-100 scale (scoring.yaml), while
+        # DEFAULT_SCORE is already 0-1 — collapse both here so `score` and
+        # `conviction_score` never disagree on units.
+        if is_placeholder:
+            score = DEFAULT_SCORE
+        else:
+            score = research_score / 100.0 if research_score > 1 else research_score
 
         row = {
             "id": str(uuid.uuid5(uuid.NAMESPACE_DNS, f"thesis_score_{symbol}_{thesis}")),
             "asset": asset.get("name", symbol),
             "thesis": thesis,
-            "score": score / 100.0 if research_score and research_score > 1 else score,
+            "score": score,
             "primary_thesis": 1,
             "portfolio_role": None,
             "best_expression_rank": None,
