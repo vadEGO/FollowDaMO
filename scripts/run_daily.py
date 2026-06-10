@@ -35,6 +35,7 @@ STAGES = [
     "refresh_prices",
     "score_macro_fit",     # tag trade ideas as macro tailwind/neutral/headwind vs active regime
     "score_technical",     # score each symbol's technical posture from market_candles
+    "build_portfolio",     # size composite-ranked ideas vs thesis budgets + portfolio heat
     "generate_daily_digest",
     "update_here_now",
     "sync_supabase",       # stage 15: push to Supabase for MoneyTrailDash (skips if key not set)
@@ -102,6 +103,7 @@ STAGE_SCRIPTS = {
     "refresh_prices":                "scripts/refresh_prices.py",
     "score_macro_fit":               "scripts/score_macro_fit.py --write",
     "score_technical":               "scripts/score_technical.py --write",
+    "build_portfolio":               "scripts/build_portfolio.py --write",
     "generate_daily_digest":         "scripts/generate_daily_digest.py",
     "update_here_now":               "scripts/generate_daily_digest.py --here-now-only",
     "sync_supabase":                 "scripts/sync_to_supabase.py",
