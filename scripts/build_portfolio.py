@@ -300,6 +300,13 @@ def _load_state_from_db(rules: dict) -> tuple[list[dict], float]:
     conn.row_factory = sqlite3.Row
     rows = [dict(r) for r in conn.execute("SELECT * FROM real_positions").fetchall()]
     conn.close()
+    # Positions don't store primary_thesis — backfill it from the asset registry
+    # so thesis_exposures can attribute current % to the right thesis.
+    asset_map = load_asset_thesis_map()
+    for r in rows:
+        if not r.get("primary_thesis"):
+            meta = asset_map.get((r.get("asset") or "").upper(), {})
+            r["primary_thesis"] = meta.get("primary_thesis") or "tactical_satellite"
     cash_rows = [r for r in rows if (r.get("asset") or "").upper() in ("CASH", "USD", "USDC")]
     positions = [r for r in rows if r not in cash_rows]
     cash = sum(position_value(r) for r in cash_rows)
@@ -344,6 +351,8 @@ def main() -> None:
     if args.write:
         n = _write_to_supabase(allocs, heat, args.dry_run)
         print(f"\n{'[DRY RUN] ' if args.dry_run else ''}Wrote {n} allocation rows to Supabase.")
+        m = _write_thesis_allocation(positions, cash, rules, args.dry_run)
+        print(f"{'[DRY RUN] ' if args.dry_run else ''}Wrote {m} thesis-allocation rows to Supabase.")
 
 
 def _fetch_composite_ideas() -> list[dict]:
@@ -361,15 +370,41 @@ def _fetch_composite_ideas() -> list[dict]:
         print("  No Supabase creds — use --state-json to run offline.", file=sys.stderr)
         return []
     import httpx
-    resp = httpx.get(f"{url}/rest/v1/public_rv_trade_composite",
-                     params={"select": "symbol,direction,asset_class,composite_score",
-                             "order": "composite_score.desc.nullslast", "limit": "200"},
+    # Rank from the unified funnel object so BOTH RealVision and MoneyTrail ideas
+    # feed portfolio construction. total_score is the blended composite the funnel
+    # ranks on; alias it to composite_score for propose_allocations().
+    resp = httpx.get(f"{url}/rest/v1/public_opportunity_action_board",
+                     params={"select": "symbol,normalized_symbol,direction,asset_class,total_score,action_state",
+                             "order": "total_score.desc.nullslast", "limit": "200"},
                      headers={"apikey": key, "Authorization": f"Bearer {key}"}, timeout=30)
-    return resp.json() if resp.status_code == 200 else []
+    if resp.status_code != 200:
+        return []
+    ideas = []
+    for r in resp.json():
+        # Exclude invalidated ideas from portfolio construction.
+        if r.get("action_state") == "invalidated":
+            continue
+        ideas.append({
+            "symbol": r.get("normalized_symbol") or r.get("symbol"),
+            "direction": r.get("direction"),
+            "asset_class": r.get("asset_class"),
+            "composite_score": r.get("total_score"),
+        })
+    return ideas
 
 
 def _write_to_supabase(allocs: list[Allocation], heat: HeatReport, dry_run: bool) -> int:
-    rows = [{**a.as_dict(), "heat_score": heat.score, "heat_level": heat.level} for a in allocs]
+    # The funnel can carry several ideas per symbol (different sources); the
+    # allocations table is keyed on symbol, so collapse to the best-ranked one
+    # per symbol before upserting (allocs arrive composite-sorted, best first).
+    seen: set[str] = set()
+    deduped = []
+    for a in allocs:
+        if a.symbol in seen:
+            continue
+        seen.add(a.symbol)
+        deduped.append(a)
+    rows = [{**a.as_dict(), "heat_score": heat.score, "heat_level": heat.level} for a in deduped]
     if dry_run:
         print(f"  [DRY RUN] Would upsert {len(rows)} rows to portfolio_allocations")
         if rows:
@@ -389,6 +424,66 @@ def _write_to_supabase(allocs: list[Allocation], heat: HeatReport, dry_run: bool
     resp = httpx.post(f"{url}/rest/v1/portfolio_allocations", headers=headers, json=rows, timeout=30)
     if resp.status_code not in (200, 201, 204):
         print(f"  ERROR upserting allocations: {resp.status_code} {resp.text[:160]}", file=sys.stderr)
+        return 0
+    return len(rows)
+
+
+def _thesis_display_names() -> dict[str, str]:
+    """{thesis_key: display_name} from config/thesis_budget.yaml (best-effort)."""
+    try:
+        data = yaml.safe_load((ROOT / "config" / "thesis_budget.yaml").read_text()) or {}
+        return {k: (v or {}).get("display_name", k.replace("_", " ").title())
+                for k, v in (data.get("theses") or {}).items()}
+    except Exception:
+        return {}
+
+
+def _write_thesis_allocation(positions: list[dict], cash: float, rules: dict, dry_run: bool) -> int:
+    """Sync current-vs-target allocation per thesis + dry powder → Supabase.
+    This is the 'how to build the portfolio' guidance: where each thesis sits
+    against its budget, and how much dry powder is available to deploy."""
+    nav = compute_nav(positions, cash)
+    exposures = thesis_exposures(positions, nav, rules)
+    names = _thesis_display_names()
+    dry_target = rules.get("thesis_budget", {}).get("dry_powder", {}).get("target", 0.10)
+    now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+
+    rows = [{
+        "thesis": e.thesis,
+        "display_name": names.get(e.thesis, e.thesis.replace("_", " ").title()),
+        "current_pct": round(e.current_pct, 4),
+        "target_pct": round(e.target_pct, 4),
+        "max_pct": round(e.max_pct, 4),
+        "headroom_pct": round(e.headroom_pct, 4),
+        "nav": round(nav, 2),
+        "updated_at": now,
+    } for e in exposures.values()]
+    # Dry powder as its own row so the page shows cash vs floor.
+    rows.append({
+        "thesis": "dry_powder", "display_name": "Dry Powder",
+        "current_pct": round(cash / nav, 4) if nav > 0 else 0.0,
+        "target_pct": round(dry_target, 4), "max_pct": 1.0,
+        "headroom_pct": 0.0, "nav": round(nav, 2), "updated_at": now,
+    })
+
+    if dry_run:
+        print(f"  [DRY RUN] Would upsert {len(rows)} thesis-allocation rows")
+        return len(rows)
+    url = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+    if not url or not key:
+        return 0
+    import httpx
+    headers = {"apikey": key, "Authorization": f"Bearer {key}",
+               "Content-Type": "application/json",
+               "Prefer": "resolution=merge-duplicates,return=minimal"}
+    try:
+        r = httpx.post(f"{url}/rest/v1/portfolio_thesis_allocation", headers=headers, json=rows, timeout=30)
+    except httpx.HTTPError as e:
+        print(f"  ERROR upserting thesis allocation: {e}", file=sys.stderr)
+        return 0
+    if r.status_code not in (200, 201, 204):
+        print(f"  ERROR upserting thesis allocation: {r.status_code} {r.text[:160]}", file=sys.stderr)
         return 0
     return len(rows)
 
