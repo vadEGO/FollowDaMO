@@ -11,6 +11,11 @@ secrets/
 # Raw knowledge content (may contain private source material)
 knowledge/raw/
 
+# Agent research scratch (generated per-asset: briefs in, results out — not source)
+knowledge/research_briefs/
+knowledge/research_results/
+knowledge/research_packs/
+
 # Logs
 logs/
 

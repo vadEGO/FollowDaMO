@@ -178,18 +178,71 @@ def mark_stage(conn: sqlite3.Connection, stage: str, status: str, error: str = N
     conn.commit()
 
 
+def run_asset_slice(symbol: str, dry_run: bool) -> None:
+    """Single-asset vertical slice — agent-driven.
+
+    Research is done by the coding agent (the moneytrail-research skill), not an
+    LLM API. This command prepares the brief and then checks whether the agent's
+    analysis has been ingested:
+
+      • If a research pack exists  → builds the opportunity row (composite →
+        lifecycle → entry/exit plan → one investment_opportunities row).
+      • If not                     → prepares the brief and stops, pointing at the
+        skill so the agent can analyse → ingest → re-run.
+
+    This keeps the deterministic I/O here and the reasoning in the agent.
+    """
+    symbol = symbol.upper()
+    print(f"MoneyTrail vertical slice — {symbol}{' [DRY RUN]' if dry_run else ''}")
+
+    pack = None
+    if DB_PATH.exists():
+        conn = get_conn()
+        pack = conn.execute(
+            "SELECT viability_score FROM research_packs WHERE UPPER(symbol) = ?",
+            (symbol,),
+        ).fetchone()
+        conn.close()
+
+    if pack is None:
+        # No conviction yet — prepare the brief and hand off to the agent.
+        print("  No research pack on file — preparing the brief for the agent.")
+        cmd = [sys.executable, "scripts/research_prepare.py", "--asset", symbol]
+        subprocess.run(cmd, cwd=ROOT)
+        print("\nNext: use the `moneytrail-research` skill to analyse "
+              f"{symbol}, then re-run `run_daily.py --asset {symbol}`.")
+        return
+
+    # Conviction is in place — build the opportunity row.
+    print(f"  Research pack found (viability={pack['viability_score']}). Building opportunity...")
+    cmd = [sys.executable, "scripts/build_opportunity.py", "--asset", symbol]
+    if dry_run:
+        cmd.append("--dry-run")
+    result = subprocess.run(cmd, cwd=ROOT)
+    if result.returncode != 0:
+        print(f"\nSlice halted: build_opportunity failed (exit {result.returncode}).")
+        sys.exit(1)
+    print(f"\nSlice complete for {symbol}.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="MoneyTrail daily pipeline")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--status", action="store_true")
     parser.add_argument("--from", dest="from_stage", help="Resume from stage")
     parser.add_argument("--only", help="Run only this stage")
+    parser.add_argument("--asset", help="Run the single-asset vertical slice: research → "
+                        "build one investment_opportunities row for this symbol (e.g. BTC)")
     parser.add_argument("--skip-positions-check", action="store_true",
                         help="Skip the real_positions empty-table warning")
     args = parser.parse_args()
 
     if args.status:
         show_status()
+        return
+
+    if args.asset:
+        run_asset_slice(args.asset, args.dry_run)
         return
 
     if not DB_PATH.exists():
