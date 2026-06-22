@@ -76,6 +76,23 @@ SHORT_WORDS = {"short", "sell", "bearish", "reduce", "trim", "underweight"}
 NEUTRAL_SCORE = 50.0
 MAX_TILT = 40.0  # a full-conviction, perfectly-aligned idea -> 90; opposed -> 10
 
+# Liquidity is an axis orthogonal to the growth/inflation season: central-bank
+# net liquidity / global M2 / credit impulse can be expanding while the season
+# is bearish, or draining while it's bullish. It acts as a SECONDARY, signed
+# nudge (max ±LIQUIDITY_MAX_TILT, half of MAX_TILT so the season stays the lead
+# signal) that's added to the season tilt — not a multiplier, so it can also
+# *disagree* with the season about a given idea (e.g. a risk-off short into a
+# liquidity drain). It only moves high-beta / liquidity-sensitive classes.
+LIQUIDITY_MAX_TILT = 20.0
+LIQUIDITY_SENSITIVE = {"crypto", "equities"}
+LIQUIDITY_SIGN = {"expanding": 1, "contracting": -1, "neutral": 0, None: 0}
+
+# Final score is clamped into this band so season+liquidity can't run away past
+# 0-100 while still leaving combined extremes distinguishable from pure-season.
+SCORE_FLOOR = 2.0
+SCORE_CEIL = 98.0
+NEUTRAL_BAND = 0.5  # |total tilt| below this rounds to a neutral label
+
 
 @dataclass
 class MacroFit:
@@ -86,10 +103,12 @@ class MacroFit:
     direction: str           # normalised: long | short | unknown
     playbook_key: str        # equities | crypto | fx | ... | unmapped
     playbook_stance: str     # up | down | neutral | unknown
-    macro_fit_score: float   # 0-100, 50 = neutral
+    macro_fit_score: float   # 0-100, 50 = neutral (season + liquidity combined)
     label: str               # tailwind | neutral | headwind | unknown
     rationale: str
     regime_season: str = ""  # the active season this was scored against
+    liquidity_regime: str = ""   # expanding | contracting | neutral | "" (unset)
+    liquidity_tilt: float = 0.0  # signed contribution of liquidity to the score
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -137,6 +156,24 @@ def playbook_stance(seasons: dict, season: str, asset_class: str) -> tuple[str, 
     return key, stance
 
 
+def liquidity_tilt(playbook_key: str, direction: str,
+                   liq_regime: str, liq_conviction: str) -> float:
+    """Signed liquidity contribution to the score for one idea.
+
+    Liquidity only moves high-beta / liquidity-sensitive classes (crypto,
+    equities). Expanding liquidity rewards longs and penalises shorts there;
+    contracting inverts; neutral/unset/insensitive -> 0. Magnitude scales by
+    liquidity conviction, capped at ±LIQUIDITY_MAX_TILT. `direction` is assumed
+    already normalised to long | short (callers bail on unknown first).
+    """
+    sign = LIQUIDITY_SIGN.get(liq_regime, 0)
+    if sign == 0 or playbook_key not in LIQUIDITY_SENSITIVE:
+        return 0.0
+    dir_sign = 1 if direction == "long" else -1
+    weight = CONVICTION_WEIGHT.get(liq_conviction, 0.6)
+    return sign * dir_sign * weight * LIQUIDITY_MAX_TILT
+
+
 def score_macro_fit(idea: dict, regime: dict, seasons: dict) -> MacroFit:
     """Score a single trade idea against the active regime.
 
@@ -153,17 +190,22 @@ def score_macro_fit(idea: dict, regime: dict, seasons: dict) -> MacroFit:
 
     season = regime.get("active_season")
     conviction = regime.get("season_conviction")
+    liq_regime = regime.get("liquidity_regime")
+    liq_conviction = regime.get("liquidity_conviction")
 
     key, stance = playbook_stance(seasons, season, asset_class)
 
-    def result(score, label, why):
+    def result(score, label, why, liq=0.0):
         return MacroFit(
             idea_id=idea_id, symbol=symbol, asset_class=asset_class,
             direction=direction, playbook_key=key, playbook_stance=stance,
             macro_fit_score=round(score, 1), label=label, rationale=why,
             regime_season=season or "",
+            liquidity_regime=liq_regime or "", liquidity_tilt=round(liq, 1),
         )
 
+    # Hard-neutral degradation paths: we can't sign a tilt without a season and
+    # a known direction, so liquidity doesn't apply either.
     if not season:
         return result(NEUTRAL_SCORE, "neutral",
                       "No active macro season set — run update_macro_regime.py.")
@@ -175,30 +217,45 @@ def score_macro_fit(idea: dict, regime: dict, seasons: dict) -> MacroFit:
                       f"No playbook stance for '{asset_class}' in {season}.")
 
     weight = CONVICTION_WEIGHT.get(conviction, 0.6)
-
-    # Bullish stance ("up") rewards longs, penalises shorts; "down" inverts;
-    # "neutral" stance leaves the score at neutral regardless of direction.
-    if stance == "neutral":
-        return result(NEUTRAL_SCORE, "neutral",
-                      f"{season.title()} is neutral on {key}; no macro tilt.")
-
-    stance_sign = 1 if stance == "up" else -1
     dir_sign = 1 if direction == "long" else -1
-    alignment = stance_sign * dir_sign  # +1 aligned, -1 opposed
 
-    tilt = alignment * weight * MAX_TILT
-    score = NEUTRAL_SCORE + tilt
-
-    if alignment > 0:
-        label = "tailwind"
-        why = (f"{season.title()} favours {key} ({stance}); a {direction} idea "
-               f"rides the regime (conviction={conviction or 'medium'}).")
+    # Season tilt: bullish stance ("up") rewards longs, "down" inverts,
+    # "neutral" contributes nothing — but liquidity can still move the idea.
+    if stance == "neutral":
+        season_tilt = 0.0
+        season_why = f"{season.title()} is neutral on {key}"
     else:
-        label = "headwind"
-        why = (f"{season.title()} says {key} {stance}; a {direction} idea fights "
-               f"the regime (conviction={conviction or 'medium'}).")
+        stance_sign = 1 if stance == "up" else -1
+        season_tilt = stance_sign * dir_sign * weight * MAX_TILT
+        if stance_sign * dir_sign > 0:
+            season_why = (f"{season.title()} favours {key} ({stance}); a {direction} "
+                          f"idea rides the regime (conviction={conviction or 'medium'})")
+        else:
+            season_why = (f"{season.title()} says {key} {stance}; a {direction} idea "
+                          f"fights the regime (conviction={conviction or 'medium'})")
 
-    return result(score, label, why)
+    # Liquidity tilt: orthogonal, signed, secondary. May reinforce or oppose.
+    liq = liquidity_tilt(key, direction, liq_regime, liq_conviction)
+    total_tilt = max(-MAX_TILT - LIQUIDITY_MAX_TILT,
+                     min(MAX_TILT + LIQUIDITY_MAX_TILT, season_tilt + liq))
+    score = max(SCORE_FLOOR, min(SCORE_CEIL, NEUTRAL_SCORE + total_tilt))
+
+    why = season_why
+    if liq:
+        liq_dir = "lifts" if liq > 0 else "weighs on"
+        why += (f"; {liq_regime} liquidity {liq_dir} this {direction} "
+                f"(conviction={liq_conviction or 'medium'})")
+    elif stance == "neutral":
+        why += "; no liquidity tilt"
+
+    if total_tilt > NEUTRAL_BAND:
+        label = "tailwind"
+    elif total_tilt < -NEUTRAL_BAND:
+        label = "headwind"
+    else:
+        label = "neutral"
+
+    return result(score, label, why + ".", liq)
 
 
 def score_all(ideas: list[dict], regime: dict, seasons: dict) -> list[MacroFit]:
@@ -327,6 +384,9 @@ def main() -> None:
     if args.explain:
         print(f"Active season: {season or '(none set)'} "
               f"(conviction={regime.get('season_conviction') or 'n/a'})")
+        print(f"Liquidity regime: {regime.get('liquidity_regime') or '(none set)'} "
+              f"(conviction={regime.get('liquidity_conviction') or 'n/a'}) "
+              f"— tilts {sorted(LIQUIDITY_SENSITIVE)} by ±{LIQUIDITY_MAX_TILT:.0f}")
         if season and season in seasons:
             playbook = seasons[season].get("asset_playbook", {})
             print(f"  {seasons[season].get('subtitle', '')}")
