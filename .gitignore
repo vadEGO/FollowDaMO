@@ -16,6 +16,10 @@ knowledge/research_briefs/
 knowledge/research_results/
 knowledge/research_packs/
 
+# Agent council scratch (generated per-topic: briefs in, results out — not source)
+knowledge/council_briefs/
+knowledge/council_results/
+
 # Logs
 logs/
 
