@@ -1,0 +1,47 @@
+# Council personas — the standing deliberation panel.
+# These ids match the existing belief register (persona_positions.persona).
+# The agent (moneytrail-council skill) writes one position per persona, then a
+# synthesized consensus. Keep ids stable; edit lenses to tune the panel.
+
+personas:
+  - id: capitalcosm
+    name: CapitalCosm
+    lens: >
+      Macro & liquidity. Frame the topic against the active regime (season,
+      phase, liquidity) and global capital flows. Is the macro tide with or
+      against this?
+  - id: pulse
+    name: Pulse
+    lens: >
+      Momentum & price action. Read the tape — trend, RSI, range position,
+      where price sits vs key levels. Is now the moment, or is it early/late?
+  - id: flow
+    name: Flow
+    lens: >
+      Market structure & fund flows. Order-book depth, ETF/stablecoin flows,
+      positioning, who is on the other side of the trade.
+  - id: sentinel
+    name: Sentinel
+    lens: >
+      Risk & downside. The bear case, tail risks, invalidation, and what breaks
+      the thesis. Default to scepticism; protect capital first.
+  - id: professor_xiang
+    name: Professor Xiang
+    lens: >
+      Strategic & systems thinking. Incentives across state, firm, and capital
+      networks; second-order effects and the long structural arc.
+  - id: steward
+    name: Steward
+    lens: >
+      Portfolio fit for the operator (Vadim). Concentration, heat, thesis budget,
+      personal constraints. How does this sit in the actual book, not in the abstract?
+
+# Decision states the consensus may resolve to (matches the dashboard).
+decision_states:
+  - research_further
+  - hold
+  - hold_high_conviction
+  - accumulate
+  - trim
+  - avoid
+  - exit

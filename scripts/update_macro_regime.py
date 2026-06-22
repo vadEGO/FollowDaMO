@@ -7,6 +7,7 @@ Usage:
     python scripts/update_macro_regime.py --notes "Oil drawing down fast, stagflation risk rising"
     python scripts/update_macro_regime.py --conviction season=high phase=medium
     python scripts/update_macro_regime.py --season fall --phase slo --conviction season=high
+    python scripts/update_macro_regime.py --liquidity contracting --conviction liquidity=high
 """
 import argparse
 import json
@@ -20,6 +21,7 @@ REGIME_PATH = ROOT / "data" / "macro_regime.json"
 
 VALID_SEASONS = {"spring", "summer", "fall", "winter"}
 VALID_PHASES = {"rec", "exp", "slo", "con"}
+VALID_LIQUIDITY = {"expanding", "neutral", "contracting"}
 VALID_CONVICTIONS = {"low", "medium", "high"}
 
 
@@ -31,10 +33,13 @@ def load_regime() -> dict:
         "updated_by": None,
         "active_season": None,
         "active_phase": None,
+        "liquidity_regime": None,
         "season_conviction": None,
         "phase_conviction": None,
+        "liquidity_conviction": None,
         "season_notes": None,
         "phase_notes": None,
+        "liquidity_notes": None,
         "country_phases": {},
     }
 
@@ -44,13 +49,13 @@ def save_regime(data: dict) -> None:
 
 
 def parse_conviction(value: str) -> tuple[str, str]:
-    """Parse 'season=high' or 'phase=medium' into (field, value)."""
+    """Parse 'season=high' / 'phase=medium' / 'liquidity=low' into (field, value)."""
     if "=" not in value:
-        print(f"ERROR: conviction must be 'season=<level>' or 'phase=<level>', got: {value}", file=sys.stderr)
+        print(f"ERROR: conviction must be 'season=<level>', 'phase=<level>' or 'liquidity=<level>', got: {value}", file=sys.stderr)
         sys.exit(1)
     key, level = value.split("=", 1)
-    if key not in ("season", "phase"):
-        print(f"ERROR: conviction key must be 'season' or 'phase', got: {key}", file=sys.stderr)
+    if key not in ("season", "phase", "liquidity"):
+        print(f"ERROR: conviction key must be 'season', 'phase' or 'liquidity', got: {key}", file=sys.stderr)
         sys.exit(1)
     if level not in VALID_CONVICTIONS:
         print(f"ERROR: conviction level must be one of {sorted(VALID_CONVICTIONS)}, got: {level}", file=sys.stderr)
@@ -62,10 +67,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Update macro regime state")
     parser.add_argument("--season", choices=sorted(VALID_SEASONS), help="Global macro season")
     parser.add_argument("--phase", choices=sorted(VALID_PHASES), help="Global growth momentum phase")
+    parser.add_argument("--liquidity", choices=sorted(VALID_LIQUIDITY),
+                        help="Global liquidity regime (CB net liquidity / M2 / credit impulse)")
     parser.add_argument("--country", nargs=2, metavar=("NAME", "PHASE"), action="append",
                         help="Set phase for a country, e.g. --country china rec")
     parser.add_argument("--notes", help="Season notes (or use --phase-notes for phase-specific)")
     parser.add_argument("--phase-notes", help="Phase/momentum notes")
+    parser.add_argument("--liquidity-notes", help="Liquidity regime notes")
     parser.add_argument("--conviction", action="append", metavar="FIELD=LEVEL",
                         help="Set conviction, e.g. --conviction season=high --conviction phase=medium")
     parser.add_argument("--show", action="store_true", help="Print current state and exit")
@@ -77,7 +85,8 @@ def main() -> None:
         print(json.dumps(data, indent=2))
         return
 
-    if not any([args.season, args.phase, args.country, args.notes, args.phase_notes, args.conviction]):
+    if not any([args.season, args.phase, args.liquidity, args.country, args.notes,
+                args.phase_notes, args.liquidity_notes, args.conviction]):
         parser.print_help()
         sys.exit(0)
 
@@ -92,6 +101,11 @@ def main() -> None:
         data["active_phase"] = args.phase
         changed = True
         print(f"  Phase → {args.phase}")
+
+    if args.liquidity:
+        data["liquidity_regime"] = args.liquidity
+        changed = True
+        print(f"  Liquidity → {args.liquidity}")
 
     if args.conviction:
         for conv in args.conviction:
@@ -109,6 +123,11 @@ def main() -> None:
         data["phase_notes"] = args.phase_notes
         changed = True
         print(f"  Phase notes → {args.phase_notes[:60]}...")
+
+    if args.liquidity_notes:
+        data["liquidity_notes"] = args.liquidity_notes
+        changed = True
+        print(f"  Liquidity notes → {args.liquidity_notes[:60]}...")
 
     if args.country:
         if "country_phases" not in data or data["country_phases"] is None:
