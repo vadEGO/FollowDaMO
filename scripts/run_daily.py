@@ -109,6 +109,10 @@ STAGE_SCRIPTS = {
     "generate_daily_digest":         "scripts/generate_daily_digest.py",
     "update_here_now":               "scripts/generate_daily_digest.py --here-now-only",
     "sync_supabase":                 "scripts/sync_to_supabase.py",
+    # Agent-driven section stages (not in the daily STAGES list; run via run_section.py).
+    # council_prepare/council_ingest take --topic, passed through as extra_args.
+    "council_prepare":               "scripts/council_prepare.py",
+    "council_ingest":                "scripts/council_ingest.py",
 }
 
 
@@ -142,13 +146,15 @@ def show_status() -> None:
     conn.close()
 
 
-def run_stage(stage: str, dry_run: bool) -> bool:
+def run_stage(stage: str, dry_run: bool, extra_args: list[str] | None = None) -> bool:
     script = STAGE_SCRIPTS.get(stage)
     if not script:
         print(f"  No script mapped for stage: {stage}")
         return False
 
     cmd = [sys.executable] + script.split()
+    if extra_args:
+        cmd += extra_args
     if dry_run:
         cmd.append("--dry-run")
 

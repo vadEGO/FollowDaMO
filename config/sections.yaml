@@ -1,0 +1,52 @@
+# Section registry — the single source of truth for splitting the analysis into
+# independently schedulable units.
+#
+# A "section" owns an ordered list of pipeline stages, a cadence, and (optionally)
+# a dependency on another section. It maps 1:1 onto a dashboard surface so that
+# each part of the analysis can run — and be seen to be fresh or stale —
+# independently of the others.
+#
+# Consumed by:
+#   - scripts/run_section.py       (runs a section's stages, stamps freshness)
+#   - scripts/install_schedules.py (emits one launchd plist per scheduled section)
+#   - the dashboard, via the pipeline_section_status roll-up synced to Supabase.
+#
+# `stages` entries are names from STAGE_SCRIPTS in scripts/run_daily.py (reused,
+# not redefined). `cadence` is one of: daily | hourly | weekly | on_demand.
+# `stale_after_hours` is the age past which the section is considered STALE — the
+# backend and the dashboard read the SAME value from here so they agree.
+# `depends_on` is advisory ordering (run_section warns if a dependency is stale).
+
+sections:
+  scores:
+    display_name: Scores
+    description: Macro-fit + technical scoring that feeds the composite conviction rank.
+    stages:
+      - score_macro_fit
+      - score_technical
+    cadence: daily
+    stale_after_hours: 28
+    # feeds: public_rv_trade_composite (scored_at) → Funnel MACRO/TECH + Macro conviction panel
+
+  portfolio:
+    display_name: Portfolio
+    description: Portfolio construction — sizes composite-ranked ideas vs thesis budgets + heat.
+    stages:
+      - build_portfolio
+    cadence: daily
+    stale_after_hours: 28
+    depends_on: scores
+    # feeds: public_portfolio_proposal / public_thesis_allocation / public_portfolio_actions
+
+  council:
+    display_name: Council
+    description: >-
+      Multi-persona deliberation. Agent-driven (prepare → agent skill → ingest),
+      so it is episodic/on-demand and takes a --topic; it is not auto-scheduled.
+    stages:
+      - council_prepare
+      - council_ingest
+    cadence: on_demand
+    stale_after_hours: 168   # shown for reference; on_demand sections are not auto-flagged STALE
+    requires_arg: topic
+    # feeds: public_latest_council_runs / public_persona_positions (created_at)

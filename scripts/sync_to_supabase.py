@@ -295,6 +295,27 @@ def sync_macro_regime(dry_run: bool) -> None:
     print(f"  [sync_macro_regime] {n} row pushed (season={data.get('active_season')}, phase={data.get('active_phase')})")
 
 
+def sync_section_status(conn: sqlite3.Connection, dry_run: bool) -> None:
+    """Push the per-section freshness roll-up → Supabase pipeline_section_status.
+
+    run_section.py writes one local row per section (last run / last ok / status).
+    The dashboard reads public_section_status to show per-section freshness chips,
+    so a single stalled section is visible even if its data didn't change."""
+    if not _table_exists(conn, "pipeline_section_status"):
+        print("  [sync_section_status] no local roll-up yet — skipping (run scripts/run_section.py first)")
+        return
+    rows_db = conn.execute(
+        """SELECT section, display_name, status, cadence, stale_after_hours,
+                  last_run_at, last_ok_at, stages, records_processed, error, updated_at
+           FROM pipeline_section_status"""
+    ).fetchall()
+    if not rows_db:
+        print("  [sync_section_status] 0 section rows")
+        return
+    n = _supabase_upsert("pipeline_section_status", [dict(r) for r in rows_db], dry_run)
+    print(f"  [sync_section_status] {n} section rows pushed")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Sync MoneyTrail data to Supabase")
     parser.add_argument("--dry-run", action="store_true", help="Print what would be pushed, no network calls")
@@ -328,6 +349,9 @@ def main() -> None:
 
     # Macro regime is independent of the SQLite DB — reads from JSON file directly
     sync_macro_regime(args.dry_run)
+
+    # Per-section freshness roll-up (written by run_section.py) → dashboard chips
+    sync_section_status(conn, args.dry_run)
 
     _supabase_delete_old_snapshots(args.dry_run)
 
