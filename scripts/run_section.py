@@ -124,8 +124,15 @@ def run_section(section: str, dry_run: bool, topic: str | None) -> bool:
         print(f"Unknown section: {section}. Valid: {', '.join(sections)}")
         sys.exit(1)
 
-    if spec.get("requires_arg") == "topic" and not topic:
-        print(f"Section '{section}' requires --topic (it is agent-driven / on-demand).")
+    if spec.get("external") or not spec.get("stages"):
+        print(f"Section '{section}' is external/watermark-only — it has no runner stages.\n"
+              f"  Its data is produced elsewhere (external bots / manual); freshness is a\n"
+              f"  data watermark published by scripts/sync_to_supabase.py. Nothing to run.")
+        sys.exit(0)
+
+    required = spec.get("requires_arg")
+    if required and not topic:
+        print(f"Section '{section}' requires --{required} (it is agent-driven / on-demand).")
         sys.exit(1)
 
     if not DB_PATH.exists():
@@ -137,7 +144,6 @@ def run_section(section: str, dry_run: bool, topic: str | None) -> bool:
     _dependency_warning(conn, spec)
 
     stages = spec.get("stages", [])
-    extra_args = ["--topic", topic] if topic else None
     print(f"MoneyTrail section '{section}' ({spec.get('cadence', '?')}) — {datetime.date.today()}")
     if dry_run:
         print("  [DRY RUN mode — no writes]")
@@ -145,11 +151,20 @@ def run_section(section: str, dry_run: bool, topic: str | None) -> bool:
     if not dry_run:
         record_section(conn, section, spec, "running", None)
 
+    def _stage_args(stage: str) -> list[str] | None:
+        # Different agent-driven stages take the on-demand arg under different flags.
+        if not topic:
+            return None
+        if stage.startswith("council_"):
+            return ["--topic", topic]
+        if stage.startswith("research_"):
+            return ["--asset", topic]
+        return None
+
     failed_stage = None
     for stage in stages:
         mark_stage(conn, stage, "running")
-        # council stages take --topic; scoring/portfolio stages ignore extra_args.
-        ok = run_stage(stage, dry_run, extra_args=extra_args if stage.startswith("council_") else None)
+        ok = run_stage(stage, dry_run, extra_args=_stage_args(stage))
         mark_stage(conn, stage, "completed" if ok else "failed",
                    error=None if ok else "Non-zero exit")
         if not ok:

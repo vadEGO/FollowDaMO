@@ -113,6 +113,9 @@ STAGE_SCRIPTS = {
     # council_prepare/council_ingest take --topic, passed through as extra_args.
     "council_prepare":               "scripts/council_prepare.py",
     "council_ingest":                "scripts/council_ingest.py",
+    # Section stages runnable on their own cadence via run_section.py.
+    "update_macro_regime":           "scripts/update_macro_regime.py",
+    "scrape_13f":                    "scripts/scrape_13f.py",
 }
 
 

@@ -50,3 +50,63 @@ sections:
     stale_after_hours: 168   # shown for reference; on_demand sections are not auto-flagged STALE
     requires_arg: topic
     # feeds: public_latest_council_runs / public_persona_positions (created_at)
+
+  # ── Data-watermark sections ────────────────────────────────────────────────
+  # Freshness for these comes from the newest timestamp of their actual data
+  # (computed in sync_to_supabase.py:WATERMARK_SECTIONS), because they are
+  # populated outside run_section.py — by scrapers, the external RV/other idea
+  # bots, or manual macro updates. feeds/filings/macro are also runnable here on
+  # a cadence; analysis/trade_ideas are agent/external and not auto-scheduled.
+
+  feeds:
+    display_name: Feeds
+    description: Source ingestion (Patreon/RSS/local drop) → raw_content.
+    stages:
+      - ingest_sources
+    cadence: daily
+    stale_after_hours: 28
+    # watermark: raw_content.collected_at
+
+  filings:
+    display_name: 13F Filings
+    description: SEC 13F position scrape (quarterly cadence) → sec_13f_positions.
+    stages:
+      - scrape_13f
+    cadence: weekly
+    stale_after_hours: 192
+    # watermark: sec_13f_scrape_state.last_scraped_at
+
+  macro:
+    display_name: Macro Regime
+    description: >-
+      Macro regime (seasons/momentum). Usually a manual/agent update; runnable
+      on a cadence but not required to be.
+    stages:
+      - update_macro_regime
+    cadence: weekly
+    stale_after_hours: 336
+    # watermark: macro_regime.json last_updated → Supabase macro_regime
+
+  analysis:
+    display_name: Research
+    description: >-
+      Per-asset research packs (prepare → agent skill → ingest). Agent-driven /
+      on-demand; watermark reflects the newest research pack.
+    stages:
+      - research_prepare
+      - research_ingest
+    cadence: on_demand
+    stale_after_hours: null   # on_demand: show age, never auto-STALE
+    requires_arg: symbol
+    # watermark: research_packs.created_at
+
+  trade_ideas:
+    display_name: Trade Ideas
+    description: >-
+      The merged idea object across sources (RV + others). Populated by external
+      bots and build_opportunity, not by run_section.py — freshness is a
+      data watermark only.
+    cadence: daily
+    stale_after_hours: 28
+    external: true            # no runner stages; watermark-only
+    # watermark: max(rv_trade_ideas.updated_at, investment_opportunities.updated_at)

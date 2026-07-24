@@ -90,7 +90,11 @@ def scheduled_sections() -> list[tuple[str, dict]]:
     data = yaml.safe_load(SECTIONS_YAML.read_text()) or {}
     out = []
     for name, spec in (data.get("sections") or {}).items():
-        if spec.get("cadence", "daily") == "on_demand":
+        # Skip on-demand (agent-driven) and external (watermark-only, no runner
+        # stages) sections — there is nothing for launchd to invoke.
+        if spec.get("cadence", "daily") == "on_demand" or spec.get("external"):
+            continue
+        if not spec.get("stages"):
             continue
         out.append((name, spec))
     return out
