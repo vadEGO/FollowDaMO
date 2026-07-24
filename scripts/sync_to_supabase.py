@@ -295,6 +295,135 @@ def sync_macro_regime(dry_run: bool) -> None:
     print(f"  [sync_macro_regime] {n} row pushed (season={data.get('active_season')}, phase={data.get('active_phase')})")
 
 
+# Data-driven sections: their freshness is the newest timestamp of the actual
+# data they own, computed here at sync time — because they are populated OUTSIDE
+# run_section.py (scrapers, the external RV/other idea bots, manual macro), so a
+# runner "last run" would be misleading or absent. Each spec resolves a watermark
+# (max timestamp) from where its data lives: local SQLite, this Supabase project,
+# or the macro JSON file.
+WATERMARK_SECTIONS = [
+    {"section": "feeds", "display_name": "Feeds", "cadence": "daily",
+     "stale_after_hours": 28, "kind": "local",
+     "table": "raw_content", "column": "collected_at",
+     "stages": "ingest_sources"},
+    {"section": "filings", "display_name": "13F Filings", "cadence": "weekly",
+     "stale_after_hours": 192, "kind": "local",
+     "table": "sec_13f_scrape_state", "column": "last_scraped_at",
+     "stages": "scrape_13f"},
+    {"section": "analysis", "display_name": "Research", "cadence": "on_demand",
+     "stale_after_hours": None, "kind": "local",
+     "table": "research_packs", "column": "created_at",
+     "stages": "research_prepare,research_ingest"},
+    {"section": "macro", "display_name": "Macro Regime", "cadence": "weekly",
+     "stale_after_hours": 336, "kind": "json",
+     "field": "last_updated", "stages": "update_macro_regime"},
+    # trade_ideas spans multiple sources (RV + others); the merged idea object is
+    # investment_opportunities. Freshness = newest of either → "new ideas arrived
+    # OR existing idea statuses were re-evaluated".
+    {"section": "trade_ideas", "display_name": "Trade Ideas", "cadence": "daily",
+     "stale_after_hours": 28, "kind": "supabase",
+     "sources": [("rv_trade_ideas", "updated_at"),
+                 ("investment_opportunities", "updated_at")],
+     "stages": "rv_bot,build_opportunity"},
+]
+
+
+def _local_max(conn: sqlite3.Connection, table: str, column: str) -> tuple[str | None, int]:
+    """Return (max timestamp, row count) for a local SQLite table, or (None, 0)."""
+    if not _table_exists(conn, table):
+        return None, 0
+    row = conn.execute(f"SELECT MAX({column}) AS ts, COUNT(*) AS n FROM {table}").fetchone()
+    return (row["ts"], row["n"]) if row else (None, 0)
+
+
+def _supabase_max(table: str, column: str) -> str | None:
+    """GET the newest value of a Supabase column via PostgREST, or None."""
+    import httpx
+    headers = {"apikey": SUPABASE_SERVICE_ROLE_KEY,
+               "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}"}
+    url = f"{SUPABASE_URL}/rest/v1/{table}"
+    params = {"select": column, "order": f"{column}.desc", "limit": 1}
+    try:
+        resp = httpx.get(url, headers=headers, params=params, timeout=15)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        return data[0][column] if data else None
+    except Exception:
+        return None
+
+
+def _watermark_row(conn: sqlite3.Connection, spec: dict) -> dict | None:
+    """Build a pipeline_section_status row from a section's data watermark."""
+    ts, count = None, 0
+    if spec["kind"] == "local":
+        ts, count = _local_max(conn, spec["table"], spec["column"])
+    elif spec["kind"] == "json":
+        if MACRO_REGIME_JSON.exists():
+            try:
+                ts = json.loads(MACRO_REGIME_JSON.read_text()).get(spec["field"])
+            except Exception:
+                ts = None
+    elif spec["kind"] == "supabase":
+        stamps = [t for t in (_supabase_max(tbl, col) for tbl, col in spec["sources"]) if t]
+        ts = max(stamps) if stamps else None
+
+    now = datetime.datetime.utcnow().isoformat()
+    return {
+        "section": spec["section"],
+        "display_name": spec["display_name"],
+        "status": "completed" if ts else "never",
+        "cadence": spec["cadence"],
+        "stale_after_hours": spec["stale_after_hours"],
+        "last_run_at": ts,
+        "last_ok_at": ts,
+        "stages": spec["stages"],
+        "records_processed": count,
+        "error": None,
+        "updated_at": now,
+    }
+
+
+def sync_section_status(conn: sqlite3.Connection, dry_run: bool) -> None:
+    """Push the per-section freshness roll-up → Supabase pipeline_section_status.
+
+    Two producer types feed one status feed:
+      1. Runner sections (scores/portfolio/council) — written to the local
+         pipeline_section_status table by run_section.py (last run / last ok).
+      2. Data-watermark sections (feeds/macro/filings/analysis/trade_ideas) —
+         computed here from the newest timestamp of each section's actual data,
+         since they are populated outside the runner.
+    The dashboard reads public_section_status generically, so every section that
+    lands here lights up its own freshness chip."""
+    rows: list[dict] = []
+
+    # 1. Runner-produced rows (if any runs have happened)
+    if _table_exists(conn, "pipeline_section_status"):
+        runner = conn.execute(
+            """SELECT section, display_name, status, cadence, stale_after_hours,
+                      last_run_at, last_ok_at, stages, records_processed, error, updated_at
+               FROM pipeline_section_status"""
+        ).fetchall()
+        rows.extend(dict(r) for r in runner)
+
+    # 2. Data-watermark rows (do not clobber a runner row of the same name)
+    runner_names = {r["section"] for r in rows}
+    for spec in WATERMARK_SECTIONS:
+        if spec["section"] in runner_names:
+            continue
+        row = _watermark_row(conn, spec)
+        if row:
+            rows.append(row)
+
+    if not rows:
+        print("  [sync_section_status] 0 section rows")
+        return
+    n = _supabase_upsert("pipeline_section_status", rows, dry_run)
+    fresh = sum(1 for r in rows if r["last_ok_at"])
+    print(f"  [sync_section_status] {n} section rows pushed ({fresh} with data, "
+          f"{len(rows) - fresh} never-run)")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Sync MoneyTrail data to Supabase")
     parser.add_argument("--dry-run", action="store_true", help="Print what would be pushed, no network calls")
@@ -328,6 +457,9 @@ def main() -> None:
 
     # Macro regime is independent of the SQLite DB — reads from JSON file directly
     sync_macro_regime(args.dry_run)
+
+    # Per-section freshness roll-up (written by run_section.py) → dashboard chips
+    sync_section_status(conn, args.dry_run)
 
     _supabase_delete_old_snapshots(args.dry_run)
 
